@@ -289,7 +289,7 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		return;
 	}
 	
-	if (buf.find("!join") != string::npos && msgNick == "codehero")
+	if (buf.find("!join") != string::npos && msgNick == owner)
 	{	
 		string channelName = getArgument(buf, "!join");
 		if(channelName.empty() || channelName == "#")
@@ -313,14 +313,14 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		channels.push_back(channelName);
 		return;
 	}
-	if (buf.find("!leave") != string::npos && msgNick == "codehero")
+	if (buf.find("!leave") != string::npos && msgNick == owner)
 	{
 		sendMessage("Leaving", msgChannel);
 		net_client.send_data("PART " + msgChannel + "\r\n");
 		channels.remove(msgChannel);
 		return;
 	}
-	if (buf.find("!quit") != string::npos && msgNick == "codehero")
+	if (buf.find("!quit") != string::npos && msgNick == owner)
 	{
 		sendMessage("Bye!", msgChannel);
 		quit = true;
