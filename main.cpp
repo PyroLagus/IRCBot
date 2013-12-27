@@ -13,12 +13,12 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	string server, channel_string, nick, port_string;
+	string server, channel_string, nick, port_string, owner;
 	int port;
 	
 	int c;
 
-	while ((c = getopt (argc, argv, "s:p:c:n:")) != -1)
+	while ((c = getopt (argc, argv, "s:p:c:n:o:")) != -1)
 	{
 		switch(c)
 		{
@@ -33,6 +33,9 @@ int main(int argc, char* argv[])
 				break;
 			case 'n':
 				nick = optarg;
+				break;
+			case 'o':
+				owner = optarg;
 				break;
 		}
 	}
@@ -54,6 +57,11 @@ int main(int argc, char* argv[])
 		cout << "Missing nick argument (-n)" << endl;
 		missing = true;
 	}
+	if(owner.empty())
+	{
+		cout << "Missing owner argument (-o)" << endl;
+		missing = true;
+	}
 	if(missing)
 	{
 		help(argv[0]);
@@ -69,6 +77,7 @@ int main(int argc, char* argv[])
         cout << "port=" + port_string << endl;
         cout << "channel=" + channel_string << endl;
         cout << "nick=" + nick << endl;
+	cout << "owner=" + owner << endl;
 	cout << "-------------------------------" << endl;
 
 	list<string> channels;
@@ -84,7 +93,7 @@ int main(int argc, char* argv[])
 			ss.ignore();
 	}
 	
-	IrcBot bot = IrcBot(server, port, channels, nick, "test");
+	IrcBot bot = IrcBot(server, port, channels, nick, "test", owner);
 	bot.start();
 
   return 0;
@@ -98,8 +107,9 @@ cout << string(program_name) + " -s irc.myserver.org [-p 6667] -c #mychannel -n 
 cout << endl;
 cout << "-s\tserver address" << endl;
 cout << "-p\tport (standard: 6667)" << endl;
-cout << "-c\tchannel/s (example -c #mychannel or -c #mychannel,#yourchannel)" << endl;
+cout << "-c\tchannel/s (example -c #mychannel or -c #mychannel,#yourchannel -o you)" << endl;
 cout << "-n\tname" << endl;
+cout << "-o\towner" << endl;
 cout << endl;
 cout << "arguments can be given in any order" << endl;
 }

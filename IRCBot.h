@@ -8,7 +8,7 @@
 class IrcBot
 {
 public:
-	IrcBot(string domain_name, int port, list<string> channel, string nick, string usr);
+	IrcBot(const string &host, const int &port, const list<string> &channel, const string &nick, const string &usr, const string &owner);
 	virtual ~IrcBot();
 
 	bool quit;
@@ -26,6 +26,7 @@ private:
 	list<string> channels;
 	string nick;
 	string usr;
+	string my_owner;
 
 	string nick_command;
 	string usr_command;

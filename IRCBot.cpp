@@ -18,7 +18,7 @@
 
 using namespace std;
 
-IrcBot::IrcBot(string host, int port, list<string> channels, string nick, string usr)
+IrcBot::IrcBot(const string &host, const int &port, const list<string> &channels, const string &nick, const string &usr, const string &owner)
 {
 	this->net_client.conn(host, port);
 
@@ -29,11 +29,12 @@ IrcBot::IrcBot(string host, int port, list<string> channels, string nick, string
 	this->channels = channels;
 	this->nick = nick;
 	this->usr = usr;
+	this->my_owner = owner;
 
 	this->nick_command = "NICK " + nick + "\r\n";
 	this->usr_command = "USER " + usr + " " + usr + " " + usr + " :" + usr + "\r\n";
 
-	for(list<string>::iterator it = channels.begin(); it != channels.end(); ++it)
+	for(list<string>::iterator it = this->channels.begin(); it != this->channels.end(); ++it)
 	{
 		this->join_command += "JOIN " + *it + "\r\n";
 	}
@@ -50,7 +51,7 @@ void IrcBot::start()
 
 	while (true)
 	{
-		buffer = net_client.receive(512);
+		buffer = net_client.receive(1024);
 		
 		//loop through buffer and process the lines seperately
 		for(string::size_type firstPos = 0, lastPos = 0; lastPos < buffer.length(); lastPos++)
