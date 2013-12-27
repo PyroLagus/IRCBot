@@ -31,8 +31,8 @@ IrcBot::IrcBot(const string &host, const int &port, const list<string> &channels
 	this->usr = usr;
 	this->my_owner = owner;
 
-	this->nick_command = "NICK " + nick + "\r\n";
-	this->usr_command = "USER " + usr + " " + usr + " " + usr + " :" + usr + "\r\n";
+	this->nick_command = "NICK " + nick;
+	this->usr_command = "USER " + usr + " " + usr + " " + usr + " :" + usr;
 
 	for(list<string>::iterator it = this->channels.begin(); it != this->channels.end(); ++it)
 	{
@@ -114,6 +114,16 @@ string IrcBot::getChannel(const string &buf)
 	return buf.substr(channelNamePos, buf.find(":", channelNamePos)-channelNamePos-1);
 }
 
+void IrcBot::sendData(const string &buf)
+{
+	net_client.send_data(buf + "\r\n");
+}
+
+void IrcBot::sendAction(const string &msg, const string &channel)
+{
+	sendMessage(string("\x01") + "ACTION " + msg + "\x01", channel);
+}
+
 void IrcBot::sendMessage(const string &msg, const string &channel)
 {
 	net_client.send_data("PRIVMSG " + channel + " :" + msg + "\r\n");
@@ -143,8 +153,8 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 {
 	if (buf.find("Found your hostname") != string::npos && !connected)
 	{	
-        	net_client.send_data(nick_command);
-        	net_client.send_data(usr_command);
+        	sendData(nick_command);
+        	sendData(usr_command);
         	cout << nick_command << usr_command;
 
 		connected = true;
@@ -152,7 +162,7 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 	}
 	if (buf.find("/MOTD") != string::npos && !joined)
         {
-		net_client.send_data(join_command);
+		sendData(join_command);
 
 		joined = true;
 		return;
@@ -192,7 +202,7 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		if(argNick.empty())
 			argNick = msgNick;
 
-		sendMessage(string("\x01") + "ACTION gives " + argNick + " a cookie" + "\x01", msgChannel);
+		sendAction("gives " + argNick + " a cookie", msgChannel);
 		return;
 	}
 	if (buf.find("!channels") != string::npos)
@@ -289,7 +299,7 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		return;
 	}
 	
-	if (buf.find("!join") != string::npos && msgNick == owner)
+	if (buf.find("!join") != string::npos && msgNick == my_owner)
 	{	
 		string channelName = getArgument(buf, "!join");
 		if(channelName.empty() || channelName == "#")
@@ -309,18 +319,18 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		}
 
 		sendMessage("Joining " + channelName, msgChannel);
-		net_client.send_data("JOIN " + channelName + "\r\n");
+		sendData("JOIN " + channelName);
 		channels.push_back(channelName);
 		return;
 	}
-	if (buf.find("!leave") != string::npos && msgNick == owner)
+	if (buf.find("!leave") != string::npos && msgNick == my_owner)
 	{
 		sendMessage("Leaving", msgChannel);
-		net_client.send_data("PART " + msgChannel + "\r\n");
+		sendData("PART " + msgChannel);
 		channels.remove(msgChannel);
 		return;
 	}
-	if (buf.find("!quit") != string::npos && msgNick == owner)
+	if (buf.find("!quit") != string::npos && msgNick == my_owner)
 	{
 		sendMessage("Bye!", msgChannel);
 		quit = true;

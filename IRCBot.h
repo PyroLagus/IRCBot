@@ -40,6 +40,8 @@ private:
 	string getChannel(const string &buf);
 	string getArgument(const string &buf, const string &command);
 	list<string>getArguments(const string &buf, const string &command);
+	void sendData(const string &buf);
+	void sendAction(const string &msg, const string &channel);
 	void sendMessage(const string &msg, const string &channel);
 	void msgHandle(const string &buf, const string &msgChannel, const string &msgNick);
 	bool checkWhitelist(const string &buffer, const string &charstring);
