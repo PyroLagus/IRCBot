@@ -18,7 +18,7 @@
 
 using namespace std;
 
-IrcBot::IrcBot(const string &host, const int &port, const list<string> &channels, const string &nick, const string &usr, const string &owner)
+IrcBot::IrcBot(const string &host, const int &port, const list<string> &channels, const string &nick, const string &usr, const string &owner, const string &trigger)
 {
 	this->net_client.conn(host, port);
 
@@ -30,9 +30,13 @@ IrcBot::IrcBot(const string &host, const int &port, const list<string> &channels
 	this->nick = nick;
 	this->usr = usr;
 	this->my_owner = owner;
+	this->trigger = trigger;
 
 	this->nick_command = "NICK " + nick;
 	this->usr_command = "USER " + usr + " " + usr + " " + usr + " :" + usr;
+
+	awaiting_names.clear();
+	names_channel.clear();
 
 	for(list<string>::iterator it = this->channels.begin(); it != this->channels.end(); ++it)
 	{
@@ -40,19 +44,17 @@ IrcBot::IrcBot(const string &host, const int &port, const list<string> &channels
 	}
 }
 
-IrcBot::~IrcBot()
-{
+IrcBot::~IrcBot() {
 
 }
 
-void IrcBot::start()
-{
+void IrcBot::start() {
 	string buffer;	//buffer is the data that is recived
 
 	while (true)
 	{
 		buffer = net_client.receive(1024);
-		
+
 		//loop through buffer and process the lines seperately
 		for(string::size_type firstPos = 0, lastPos = 0; lastPos < buffer.length(); lastPos++)
 		{
@@ -61,7 +63,7 @@ void IrcBot::start()
 
 			if(lastPos > buffer.size())
 				break;	//break before msgHandle is called
-			
+
 			string bufferSubstr = buffer.substr(firstPos, lastPos);
 			cout << ">> " << bufferSubstr << endl;
 			msgHandle(bufferSubstr, getChannel(bufferSubstr), getNick(bufferSubstr));
@@ -86,14 +88,13 @@ void IrcBot::start()
 		{
 			cout << "----------------------CONNECTION CLOSED---------------------------"<< endl;
 			cout << timeNow() << endl;
-		
+
 			break;
 		}
 	}
 }
 
-char * IrcBot::timeNow()
-{//returns the current date and time
+char * IrcBot::timeNow() {//returns the current date and time
 	time_t rawtime;
 	struct tm * timeinfo;
 
@@ -103,38 +104,32 @@ char * IrcBot::timeNow()
 	return asctime (timeinfo);
 }
 
-string IrcBot::getNick(const string &buf)
-{
+string IrcBot::getNick(const string &buf) {
 	return buf.substr(1, buf.find("!")-1);
 }
 
-string IrcBot::getChannel(const string &buf)
-{
+string IrcBot::getChannel(const string &buf) {
 	size_t channelNamePos = buf.find("PRIVMSG #")+8;
 	return buf.substr(channelNamePos, buf.find(":", channelNamePos)-channelNamePos-1);
 }
 
-void IrcBot::sendData(const string &buf)
-{
+void IrcBot::sendData(const string &buf) {
 	net_client.send_data(buf + "\r\n");
 }
 
-void IrcBot::sendAction(const string &msg, const string &channel)
-{
+void IrcBot::sendAction(const string &msg, const string &channel) {
 	sendMessage(string("\x01") + "ACTION " + msg + "\x01", channel);
 }
 
-void IrcBot::sendMessage(const string &msg, const string &channel)
-{
+void IrcBot::sendMessage(const string &msg, const string &channel) {
 	net_client.send_data("PRIVMSG " + channel + " :" + msg + "\r\n");
 }
 
-string IrcBot::getArgument(const string &buf, const string &command)
-{
-	size_t commandPos = buf.find(command);
+string IrcBot::getArgument(const string &buf, const string &command) {
+	size_t commandPos = buf.find(trigger+command);
 
-	size_t argumentPos = buf.find_first_not_of(command, commandPos)+1;
-                
+	size_t argumentPos = buf.find_first_not_of(trigger+command, commandPos)+1;
+
 	string argument = buf.substr(argumentPos);
 
 	size_t found = argument.find_last_not_of(" \r\n");
@@ -145,14 +140,18 @@ string IrcBot::getArgument(const string &buf, const string &command)
 	return argument;
 }
 
-list<string> IrcBot::getArguments(const string &buf, const string &command)
-{
+list<string> IrcBot::getArguments(const string &buf, const string &command) {
 }
 
-void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string &msgNick)
-{
-	if (buf.find("Found your hostname") != string::npos && !connected)
-	{	
+bool IrcBot::checkTrigger(const string &buf, const string &msgChannel, const string &command) {
+    string privMsg = "PRIVMSG " + msgChannel + " :";
+    return (buf.find(privMsg+trigger+command) != string::npos );
+}
+
+void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string &msgNick) {
+    string privMsg = "PRIVMSG " + msgChannel + " :";
+
+	if (buf.find("Found your hostname") != string::npos && !connected) {
         	sendData(nick_command);
         	sendData(usr_command);
         	cout << nick_command << usr_command;
@@ -160,53 +159,57 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		connected = true;
 		return;
 	}
-	if (buf.find("/MOTD") != string::npos && !joined)
-        {
+	if (buf.find("/MOTD") != string::npos && !joined) {
 		sendData(join_command);
 
 		joined = true;
 		return;
 	}
-	if (buf.find(":Nickname is already in use.") != string::npos && buf.find("!") == string::npos)
-	{
+	if (buf.find(":Nickname is already in use.") != string::npos && buf.find("!") == string::npos) {
 		cout << "Nickname already in use" << endl;
 		error = true;
 		return;
 	}
 
-	if (buf.substr(0, 6).find("PING :") != string::npos)
-	{
+	if (buf.substr(0, 6).find("PING :") != string::npos) {
 		net_client.send_data("PONG :" + buf.substr(6));
 		cout << "PONG :" + buf.substr(6);
 		return;
 	}
-
-        if (buf.find("huhu " + nick) != string::npos)
-        {
+    if (buf.find("huhu " + nick) != string::npos) {
 		sendMessage("huhu " + msgNick, msgChannel);
-                return;
-        }
-	if (buf.find("!help") != string::npos)
-	{
+        return;
+    }
+	if (checkTrigger(buf, msgChannel, "help")) {
 		sendMessage("No help from me.", msgChannel);
 		return;
 	}
-	if (buf.find("!dice") != string::npos)
-	{
-		sendMessage(std::to_string(rand() % 6 + 1), msgChannel);
+	if (checkTrigger(buf, msgChannel, "roll")) {
+	    int faces = 1;
+	    string arg = getArgument(buf, "roll");
+	    if(arg.empty())
+            faces = 6;
+        else
+        {
+            try {
+                faces = stoi(arg);
+            } catch (std::invalid_argument) {
+                sendMessage("You need to input a valid number", msgChannel);
+                return;
+            }
+        }
+		sendMessage(std::to_string(rand() % faces + 1), msgChannel);
 		return;
 	}
-	if (buf.find("!cookie") != string::npos)
-	{
-		string argNick = getArgument(buf, "!cookie");
+	if (checkTrigger(buf, msgChannel, "cookie")) {
+		string argNick = getArgument(buf, "cookie");
 		if(argNick.empty())
 			argNick = msgNick;
 
 		sendAction("gives " + argNick + " a cookie", msgChannel);
 		return;
 	}
-	if (buf.find("!channels") != string::npos)
-	{
+	if (checkTrigger(buf, msgChannel, "channels")) {
 		string message;
 		for(list<string>::iterator it = channels.begin(); it != channels.end(); ++it)
 		{
@@ -215,13 +218,11 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		sendMessage(message.erase(0,1), msgChannel);
 		return;
 	}
-	if (buf.find("!channel") != string::npos)
-	{
+	if (checkTrigger(buf, msgChannel, "channel")) {
 		sendMessage(msgChannel, msgChannel);
 		return;
 	}
-	if (buf.find("!topic") != string::npos)
-	{
+	if (checkTrigger(buf, msgChannel, "topic")) {
 		if(msgNick[0] != '@')
 		{
 			sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
@@ -231,57 +232,53 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		net_client.send_data("TOPIC " + msgChannel + " :" + topic + "\r\n");
 		return;
 	}
-	if (buf.find("!nowplaying") != string::npos)
-	{
-		sendMessage("!np", msgChannel);
+	if (checkTrigger(buf, msgChannel, "say")) {
+        string sayThis = getArgument(buf, "say");
+        sendMessage(sayThis, msgChannel);
+    }
+	if (checkTrigger(buf, msgChannel, "nowplaying")) {
+		sendMessage(">trccnp", msgChannel);
 		return;
 	}
-	if (buf.find("!time") != string::npos)
-	{
+	if (checkTrigger(buf, msgChannel, "time")) {
 		sendMessage(timeNow(), msgChannel);
 		return;
 	}
-	if (buf.find("!names") != string::npos)
-	{
-		string channelName = getArgument(buf, "!names");
+	if (checkTrigger(buf, msgChannel, "names")) {
+		string channelName = getArgument(buf, "names");
 
 		if(channelName.empty() || channelName == "#")
 			channelName = msgChannel;
-		if(channelName[0] != '#')
-                {
+		if(channelName[0] != '#') {
                         sendMessage("Channel name has to start with a #", msgChannel);
                         return;
                 }
-                if(!checkWhitelist(channelName, channelWhitelist))
-                {
+                if(!checkWhitelist(channelName, channelWhitelist)) {
                         sendMessage("Channel name contains invalid characters.", msgChannel);
                         return;
                 }
-		
+
 		net_client.send_data("NAMES " + channelName + "\r\n");
 
-		//awaiting_names = msgChannel;
+		awaiting_names = msgChannel;
 
 		return;
 
 	}
-	if (buf.find("!namemap") != string::npos)
-	{
-		if(nicks.find(msgChannel) != nicks.end())
-		{
+	if (checkTrigger(buf, msgChannel, "namemap")) {
+		if(nicks.find(msgChannel) != nicks.end()) {
 			sendMessage("map: " + nicks.find(msgChannel)->second, msgChannel);
 		}
-		else
-		{
+		else {
 			sendMessage("sorry ._.", msgChannel);
 		}
 		return;
 	}
-	if (buf.find("353 " + nick) != string::npos && false)
-	{
+	if (buf.find("353 " + nick) != string::npos && !awaiting_names.empty()) {
 		string names = buf.substr(buf.find_last_of(":")+1);
 		size_t channelNamePos = buf.find("#");
 		string channel_string = buf.substr(channelNamePos, buf.find_last_of(":")-channelNamePos-1);
+		names_channel = channel_string;
 
 		size_t found = channel_string.find_last_not_of(" \r\n");
 		if (found != string::npos)
@@ -289,31 +286,29 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
         	else channel_string.clear();
 
 		nicks.insert( make_pair(channel_string, names) );
-
 		return;
 	}
-	if (buf.find("366 " + nick) != string::npos && !awaiting_names.empty())
-	{
-		sendMessage("No NAMES available.", awaiting_names);
+	if (buf.find("366 " + nick) != string::npos && !awaiting_names.empty()) {
+	    if(!names_channel.empty())
+            sendMessage("Nicks in " + names_channel + " : " + nicks[names_channel], awaiting_names);
+        else
+            sendMessage("No NAMES available.", awaiting_names);
 		awaiting_names.clear();
+		names_channel.clear();
 		return;
 	}
-	
-	if (buf.find("!join") != string::npos && msgNick == my_owner)
-	{	
-		string channelName = getArgument(buf, "!join");
-		if(channelName.empty() || channelName == "#")
-		{
+
+	if (checkTrigger(buf, msgChannel, "join") && msgNick == my_owner) {
+		string channelName = getArgument(buf, "join");
+		if(channelName.empty() || channelName == "#") {
 			sendMessage("No channel specified.", msgChannel);
 			return;
 		}
-		if(channelName[0] != '#')
-		{
+		if(channelName[0] != '#') {
 			sendMessage("Channel name has to start with a #", msgChannel);
 			return;
 		}
-		if(!checkWhitelist(channelName, channelWhitelist))
-		{
+		if(!checkWhitelist(channelName, channelWhitelist)) {
 			sendMessage("Channel name contains invalid characters.", msgChannel);
 			return;
 		}
@@ -322,24 +317,31 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		sendData("JOIN " + channelName);
 		channels.push_back(channelName);
 		return;
+	} else if (checkTrigger(buf, msgChannel, "join")) {
+        sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
+        return;
 	}
-	if (buf.find("!leave") != string::npos && msgNick == my_owner)
-	{
-		sendMessage("Leaving", msgChannel);
-		sendData("PART " + msgChannel);
+	if (checkTrigger(buf, msgChannel, "leave") && msgNick == my_owner) {
+        string channel = getArgument(buf, "leave");
+        if(channel.empty())
+            channel = msgChannel;
+		sendMessage("Leaving "+channel, msgChannel);
+		sendData("PART " + channel);
 		channels.remove(msgChannel);
 		return;
+	} else if (checkTrigger(buf, msgChannel, "leave")) {
+        sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
+        return;
 	}
-	if (buf.find("!quit") != string::npos && msgNick == my_owner)
-	{
+	if (checkTrigger(buf, msgChannel, "quit") && msgNick == my_owner) {
 		sendMessage("Bye!", msgChannel);
+		sendData("QUIT :Bye!");
 		quit = true;
 		return;
 	}
-	else if (buf.find("!quit") != string::npos)
-	{
+	else if (checkTrigger(buf, msgChannel, "quit")) {
 		sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
-	}		
+	}
 
 /*	if (buf.find("!bugme") != string::npos)
         {
@@ -347,7 +349,7 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
                 time( &bugtime );
                 sendMessage(getNick(buf) + ": got it!", channel);
                 return;
-        }       
+        }
 	if ( bugtime+5 < time(NULL) )
 	{
 		sendMessage(bugstring + ": hello!!!", channel);
@@ -357,8 +359,7 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 */
 }
 
-bool IrcBot::checkWhitelist(const string &buffer, const string &charstring)
-{
+bool IrcBot::checkWhitelist(const string &buffer, const string &charstring) {
 if (buffer.find_first_not_of(charstring) != std::string::npos)
 	return false;
 else return true;

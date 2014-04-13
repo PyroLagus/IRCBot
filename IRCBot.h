@@ -8,7 +8,7 @@
 class IrcBot
 {
 public:
-	IrcBot(const string &host, const int &port, const list<string> &channel, const string &nick, const string &usr, const string &owner);
+	IrcBot(const string &host, const int &port, const list<string> &channel, const string &nick, const string &usr, const string &owner, const string &trigger);
 	virtual ~IrcBot();
 
 	bool quit;
@@ -27,12 +27,14 @@ private:
 	string nick;
 	string usr;
 	string my_owner;
+	string trigger;
 
 	string nick_command;
 	string usr_command;
 	string join_command;
 
 	string awaiting_names;
+	string names_channel;
 
 	char * timeNow();
 
@@ -43,6 +45,7 @@ private:
 	void sendData(const string &buf);
 	void sendAction(const string &msg, const string &channel);
 	void sendMessage(const string &msg, const string &channel);
+	bool checkTrigger(const string &buf, const string &msgChannel, const string &command);
 	void msgHandle(const string &buf, const string &msgChannel, const string &msgNick);
 	bool checkWhitelist(const string &buffer, const string &charstring);
 };
