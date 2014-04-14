@@ -2,6 +2,7 @@
 #define IRCBOT_H_
 #include <string>
 #include <list>
+#include <set>
 #include <unordered_map>
 #include "socketwrapper.h"
 
@@ -28,6 +29,7 @@ private:
 	string usr;
 	string my_owner;
 	string trigger;
+	set<string> admins;
 
 	string nick_command;
 	string usr_command;
@@ -48,6 +50,10 @@ private:
 	bool checkTrigger(const string &buf, const string &msgChannel, const string &command);
 	void msgHandle(const string &buf, const string &msgChannel, const string &msgNick);
 	bool checkWhitelist(const string &buffer, const string &charstring);
+
+    void addAdmin(const string &name);
+    void removeAdmin(const string &name);
+	bool isAdmin(const string &msgNick);
 };
 
 #endif

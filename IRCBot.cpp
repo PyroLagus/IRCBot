@@ -1,6 +1,7 @@
 #include "IRCBot.h"
 #include <iostream>
 #include <cstdio>
+#include <sstream>
 #include <cstdlib>
 #include <unistd.h>
 #include <errno.h>
@@ -34,6 +35,8 @@ IrcBot::IrcBot(const string &host, const int &port, const list<string> &channels
 
 	this->nick_command = "NICK " + nick;
 	this->usr_command = "USER " + usr + " " + usr + " " + usr + " :" + usr;
+
+    addAdmin(my_owner);
 
 	awaiting_names.clear();
 	names_channel.clear();
@@ -176,12 +179,18 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		cout << "PONG :" + buf.substr(6);
 		return;
 	}
+
+
+
     if (buf.find("huhu " + nick) != string::npos) {
 		sendMessage("huhu " + msgNick, msgChannel);
         return;
     }
 	if (checkTrigger(buf, msgChannel, "help")) {
-		sendMessage("No help from me.", msgChannel);
+        stringstream ss;
+        ss << trigger+"cookie <username> gives cookies to <username>" << endl;
+        ss << trigger+"channels lists the channels I'm in" << endl;
+		sendMessage(ss.str(), msgChannel);
 		return;
 	}
 	if (checkTrigger(buf, msgChannel, "roll")) {
@@ -232,10 +241,28 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		net_client.send_data("TOPIC " + msgChannel + " :" + topic + "\r\n");
 		return;
 	}
-	if (checkTrigger(buf, msgChannel, "say")) {
+
+    if (checkTrigger(buf, msgChannel, "saychan") && isAdmin(msgNick)) { // put this before say to avoid problems
+        string sayThis = getArgument(buf, "saychan");
+        size_t found = sayThis.find(" "); // second space
+        string channelName = sayThis.substr(0, found); // get the channel name, which is the first argument
+        sayThis = sayThis.substr(found+1); // get the message, which is the second argument
+
+        sendMessage(sayThis, channelName);
+        return;
+    } else if (checkTrigger(buf, msgChannel, "saychan")) {
+        sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
+        return;
+    }
+
+	if (checkTrigger(buf, msgChannel, "say") && isAdmin(msgNick)) {
         string sayThis = getArgument(buf, "say");
         sendMessage(sayThis, msgChannel);
+    } else if (checkTrigger(buf, msgChannel, "say")) {
+        sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
+        return;
     }
+
 	if (checkTrigger(buf, msgChannel, "nowplaying")) {
 		sendMessage(">trccnp", msgChannel);
 		return;
@@ -274,7 +301,7 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		}
 		return;
 	}
-	if (buf.find("353 " + nick) != string::npos && !awaiting_names.empty()) {
+	if (buf.find("353 " + nick) != string::npos) {
 		string names = buf.substr(buf.find_last_of(":")+1);
 		size_t channelNamePos = buf.find("#");
 		string channel_string = buf.substr(channelNamePos, buf.find_last_of(":")-channelNamePos-1);
@@ -298,7 +325,30 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		return;
 	}
 
-	if (checkTrigger(buf, msgChannel, "join") && msgNick == my_owner) {
+	if (checkTrigger(buf, msgChannel, "addadmin") && msgNick == my_owner) {
+        string adminName = getArgument(buf, "addadmin");
+        addAdmin(adminName);
+        sendMessage(adminName+" was added as an admin", msgChannel);
+        return;
+	}
+	if (checkTrigger(buf, msgChannel, "removeadmin") && msgNick == my_owner) {
+        string adminName = getArgument(buf, "removeadmin");
+        removeAdmin(adminName);
+        sendMessage(adminName+" was removed as an admin", msgChannel);
+        return;
+	}
+	if (checkTrigger(buf, msgChannel, "listadmins")) {
+        stringstream ss;
+        for(set<string>::iterator it = admins.begin(); it != admins.end(); ++it) {
+            ss << *it << " ";
+        }
+        string adminNames= ss.str();
+        adminNames.pop_back();
+        sendMessage("Admins: "+adminNames, msgChannel);
+        return;
+	}
+
+	if (checkTrigger(buf, msgChannel, "join") && isAdmin(msgNick)) {
 		string channelName = getArgument(buf, "join");
 		if(channelName.empty() || channelName == "#") {
 			sendMessage("No channel specified.", msgChannel);
@@ -321,19 +371,28 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
         sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
         return;
 	}
-	if (checkTrigger(buf, msgChannel, "leave") && msgNick == my_owner) {
+	if (checkTrigger(buf, msgChannel, "leave") && isAdmin(msgNick)) {
         string channel = getArgument(buf, "leave");
         if(channel.empty())
             channel = msgChannel;
 		sendMessage("Leaving "+channel, msgChannel);
 		sendData("PART " + channel);
-		channels.remove(msgChannel);
+		channels.remove(channel);
 		return;
 	} else if (checkTrigger(buf, msgChannel, "leave")) {
         sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
         return;
 	}
-	if (checkTrigger(buf, msgChannel, "quit") && msgNick == my_owner) {
+	if (checkTrigger(buf, msgChannel, "kick") && isAdmin(msgNick)) {
+        string name = getArgument(buf, "kick");
+        sendData("KICK " + msgChannel + " " + name);
+	} else if (checkTrigger(buf, msgChannel, "kick")) {
+        sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
+	}
+
+
+
+	if (checkTrigger(buf, msgChannel, "quit") && isAdmin(msgNick)) {
 		sendMessage("Bye!", msgChannel);
 		sendData("QUIT :Bye!");
 		quit = true;
@@ -341,6 +400,14 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 	}
 	else if (checkTrigger(buf, msgChannel, "quit")) {
 		sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
+	}
+
+	if (checkTrigger(buf, msgChannel, "sendraw") && msgNick == my_owner) {
+        string myData = getArgument(buf, "sendraw");
+        sendData(myData);
+        return;
+	} else if (checkTrigger(buf, msgChannel, "sendraw")) {
+        sendMessage("Sorry " + msgNick + ", I'm afraid I can't let you do that", msgChannel);
 	}
 
 /*	if (buf.find("!bugme") != string::npos)
@@ -363,4 +430,19 @@ bool IrcBot::checkWhitelist(const string &buffer, const string &charstring) {
 if (buffer.find_first_not_of(charstring) != std::string::npos)
 	return false;
 else return true;
+}
+
+void IrcBot::addAdmin(const string &name) {
+    admins.insert(name);
+}
+
+void IrcBot::removeAdmin(const string &name) {
+    admins.erase(name);
+}
+
+bool IrcBot::isAdmin(const string &msgNick) {
+    if(admins.find(msgNick) != admins.end()) {
+        return true;
+    }
+    return false;
 }
