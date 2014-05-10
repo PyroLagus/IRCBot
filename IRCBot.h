@@ -3,6 +3,7 @@
 #include <string>
 #include <list>
 #include <set>
+#include <vector>
 #include <unordered_map>
 #include "socketwrapper.h"
 
@@ -38,12 +39,14 @@ private:
 	string awaiting_names;
 	string names_channel;
 
+	unordered_map<string,vector<string>> notes;
+
 	char * timeNow();
 
 	string getNick(const string &buf);
 	string getChannel(const string &buf);
 	string getArgument(const string &buf, const string &command);
-	list<string>getArguments(const string &buf, const string &command);
+	vector<string>getArguments(const string &buf, const string &command, const string &delimiters);
 	void sendData(const string &buf);
 	void sendAction(const string &msg, const string &channel);
 	void sendMessage(const string &msg, const string &channel);
