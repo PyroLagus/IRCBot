@@ -19,6 +19,14 @@
 
 using namespace std;
 
+struct BotFunctArgs
+{
+    IrcBot* bot;
+    string buf;
+    string msgChannel;
+    string msgNick;
+};
+
 IrcBot::IrcBot(const string &host, const int &port, const list<string> &channels, const string &nick, const string &usr, const string &owner, const string &trigger)
 {
 	this->net_client.conn(host, port);
@@ -45,6 +53,8 @@ IrcBot::IrcBot(const string &host, const int &port, const list<string> &channels
 	{
 		this->join_command += "JOIN " + *it + "\r\n";
 	}
+
+	triggerFunctions["roll"] = IrcBotFuncts::roll;
 }
 
 IrcBot::~IrcBot() {
@@ -168,27 +178,54 @@ vector<string> IrcBot::getArguments(const string &buf, const string &command, co
 bool IrcBot::checkTrigger(const string &buf, const string &msgChannel, const string &command) {
     string privMsg = "PRIVMSG " + msgChannel + " :";
     return (buf.find(privMsg+trigger+command) != string::npos );
-}
+    }
 
 void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string &msgNick) {
+    BotFunctArgs args;
+    args.bot = this;
+    args.buf = buf;
+    args.msgChannel = msgChannel;
+    args.msgNick = msgNick;
+
     string privMsg = "PRIVMSG " + msgChannel + " :";
+    string head = privMsg + trigger;
+    
+    if(buf.find(head) != string::npos) {
+	std::size_t first = buf.find(' ');
+	first = buf.find(' ', first+1);
+	first = buf.find(' ', first+1);
+	first += 3;
+	std::size_t last = buf.find_first_of(" \n\r", first+1);
+	last;
 
+	string command = buf.substr(first, last-first);
+
+	try {
+	    triggerFunctions.at(command)(this, buf, msgChannel, msgNick);
+	}
+	catch (std::out_of_range)
+	    {
+		cout << "|" << command << "|" << " is not a valid command." << endl;
+	    }
+    }
+	
 	if (buf.find("Found your hostname") != string::npos && !connected) {
-        	sendData(nick_command);
-        	sendData(usr_command);
-        	cout << nick_command << usr_command;
-
-		connected = true;
-		return;
+	    sendData(nick_command);
+	    sendData(usr_command);
+	    cout << nick_command << usr_command;
+	    
+	    connected = true;
+	    return;
 	}
-	if (buf.find("/MOTD") != string::npos && !joined) {
-		sendData(join_command);
 
-		joined = true;
-		return;
-	}
+    if (buf.find("/MOTD") != string::npos && !joined) {
+	sendData(join_command);
+	
+	joined = true;
+	return;
+    }
 	if (buf.find(":Nickname is already in use.") != string::npos && buf.find("!") == string::npos) {
-		cout << "Nickname already in use" << endl;
+	    cout << "Nickname already in use" << endl;
 		error = true;
 		return;
 	}
@@ -212,7 +249,7 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 		sendMessage(ss.str(), msgChannel);
 		return;
 	}
-	if (checkTrigger(buf, msgChannel, "roll")) {
+	/*	if (checkTrigger(buf, msgChannel, "roll")) {
 	    int faces = 1;
 	    string arg = getArgument(buf, "roll");
 	    if(arg.empty())
@@ -228,7 +265,9 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
         }
 		sendMessage(std::to_string(rand() % faces + 1), msgChannel);
 		return;
-	}
+		}*/
+	//		if (checkTrigger(buf, msgChannel, "roll"))
+	//    triggerFunctions["roll"](this, buf, msgChannel, msgNick);
 	if (checkTrigger(buf, msgChannel, "cookie")) {
 		string argNick = getArgument(buf, "cookie");
 		if(argNick.empty())
@@ -465,4 +504,22 @@ bool IrcBot::isAdmin(const string &msgNick) {
         return true;
     }
     return false;
+}
+
+void IrcBotFuncts::roll(IrcBot *bot, const string& buf, const string& msgChannel, const string& msgNick) {
+    int faces = 1;
+    string arg = bot->getArgument(buf, "roll");
+    if(arg.empty())
+	faces = 6;
+    else
+        {
+            try {
+                faces = stoi(arg);
+            } catch (std::invalid_argument) {
+                bot->sendMessage("You need to input a valid number", msgChannel);
+                return;
+            }
+	}
+    bot->sendMessage(std::to_string(rand() % faces + 1), msgChannel);
+    return;
 }
