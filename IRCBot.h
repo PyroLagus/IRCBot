@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <functional>
 #include "socketwrapper.h"
+#include "IRCBotFuncts.h"
 
 class IrcBot
 {
@@ -41,7 +42,7 @@ private:
 	string names_channel;
 
 	unordered_map<string,vector<string>> notes;
-	unordered_map<string,function<void(IrcBot*,const string&, const string&, const string&)>> triggerFunctions;
+	unordered_map<string,function<string(BotFunctArgs&)>> triggerFunctions;
 
 	char * timeNow();
 
@@ -62,11 +63,4 @@ private:
 
 	friend class IrcBotFuncts;
 };
-
-class IrcBotFuncts
-{
- public:
-    static void roll(IrcBot *bot, const string &buf, const string &msgChannel, const string &msgNick);
-};
-
 #endif
