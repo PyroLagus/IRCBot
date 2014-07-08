@@ -7,16 +7,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
-/*
-  #include <sys/types.h>
-  #include <sys/socket.h>
-  #include <netinet/in.h>
-  #include <netdb.h>
-  #include <arpa/inet.h>
-  #include <sys/wait.h>
-  #include <signal.h>
-  #include <time.h>
-*/
 
 using namespace std;
 
@@ -236,15 +226,12 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 	string command = buf.substr(first, last-first);
 	args.arg = getArgument(buf, command);
 	args.args = getArguments(buf, command, " ");
-
-	try {
-	    triggerFunctions.at(command)(this, args);
+	if(triggerFunctions.find(command) != triggerFunctions.end()) {
+	    triggerFunctions.at(command)(this,args);
+	} else {
+	    cout << "|" << command << "|" << " is not a valid command." << endl;
 	}
-	catch (std::out_of_range)
-	    {
-		cout << "|" << command << "|" << " is not a valid command." << endl;
-	    }
-	return; //we don't want to call other stuff if it's a PRIVMSG (we can handle PRIVMSG by using the triggerFunctions)
+		return; //we don't want to call other stuff if it's a PRIVMSG (we can handle PRIVMSG by using the triggerFunctions)
     }
     extraHandle(buf, msgChannel, msgNick);
 
@@ -257,7 +244,6 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 	return;
     }
     if (buf.find("/MOTD") != string::npos && !joined) {
-	//sendData(join_command);
 	for(auto f : channels) {
 	    sendData("JOIN " + f);
 	    sendData("NAMES " + f);
@@ -280,27 +266,17 @@ void IrcBot::msgHandle(const string &buf, const string &msgChannel, const string
 	size_t channel_start = buf.find_last_of("#");
 	size_t channel_end = buf.find_last_not_of("\r\n")+1;
 	string channel = buf.substr(channel_start, channel_end-channel_start);
-	try {
+	if(nicks.find(channel) != nicks.end()) {
 	    nicks.at(channel).insert(msgNick);
-	    for(auto f : channels)
-		sendMessage(msgNick+" joined "+channel, f);
 	}
-	catch (std::out_of_range)
-	    {
-	    }
     }
     if (buf.find("PART") != string::npos) {
 	size_t channel_start = buf.find_last_of("#");
 	size_t channel_end = buf.find_last_not_of("\r\n")+1;
 	string channel = buf.substr(channel_start, channel_end-channel_start);
-	try {
+	if(nicks.find(channel) != nicks.end()) {
 	    nicks.at(channel).erase(msgNick);
-	    for(auto f : channels)
-		sendMessage(msgNick+" left "+channel, f);
 	}
-	catch (std::out_of_range)
-	    {
-	    }
     }
     if (buf.find("QUIT") != string::npos) {
 	// loop through map, search for nick, and erase each
@@ -422,25 +398,21 @@ void IrcBot::registerFunction(const string &name, function<void(IrcBot*, BotFunc
 }
 
 bool IrcBot::activateFunction(const string &name) {
-    try {
+    if(deactivatedFunctions.find(name) != deactivatedFunctions.end()) {
 	pair<string,function<void(IrcBot*, BotFunctArgs&)>> funct(name, deactivatedFunctions.at(name));
 	deactivatedFunctions.erase(name);
 	return get<1>(triggerFunctions.insert(funct));
+    } else {
+	return false;
     }
-    catch (std::out_of_range)
-	{
-	    return false;
-	}
 }
 
 bool IrcBot::deactivateFunction(const string &name) {
-    try {
+    if(triggerFunctions.find(name) != triggerFunctions.end()) {
 	pair<string,function<void(IrcBot*, BotFunctArgs&)>> funct(name, triggerFunctions.at(name));
 	triggerFunctions.erase(name);
 	return get<1>(deactivatedFunctions.insert(funct));
+    } else {
+	return false;
     }
-    catch (std::out_of_range)
-	{
-	    return false;
-	}
 }
